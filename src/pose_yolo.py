@@ -4,9 +4,11 @@ except Exception:
     YOLO = None
 import cv2
 import numpy as np
+from temporal_smoothing import ExponentialSmoother
 
 
 _model = None
+_smoother = ExponentialSmoother(alpha=0.3, min_confidence=0.25)
 
 if YOLO is not None:
     try:
@@ -72,6 +74,7 @@ def get_landmarks(frame, conf_threshold=0.25):
             person_conf = conf
 
     points = {}
+    confidences = {}
     for idx, coord in enumerate(person_xy):
         x, y = coord[0], coord[1]
         c = None
@@ -87,10 +90,17 @@ def get_landmarks(frame, conf_threshold=0.25):
         # default to detected if no confidence available
         if c is None:
             ok = True
+            c = 1.0  # Assume high confidence if not provided
         else:
             ok = (c >= conf_threshold)
+        
         if not ok:
             points[idx] = None
+            confidences[idx] = 0.0
         else:
             points[idx] = (int(x), int(y))
-    return points
+            confidences[idx] = c
+    
+    # Apply temporal smoothing to reduce jitter
+    smoothed_points = _smoother.smooth(points, confidences)
+    return smoothed_points
